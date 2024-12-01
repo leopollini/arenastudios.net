@@ -1,0 +1,77 @@
+version: "3.5"
+
+networks:
+  app-network:
+    driver: bridge
+    name: app-network
+
+volumes:
+  db:
+    driver: local
+    name: db
+    driver_opts:
+      o: bind
+      device: /home/leonardo/data/mariadb
+      type: none
+  wp:
+    driver: local
+    name: wp
+    driver_opts:
+      o: bind
+      device: /home/leonardo/data/wordpress
+      type: none
+
+services:
+  mariadb:
+    container_name: mariadb
+    image: mariadb:latest
+    networks:
+      - app-network
+    env_file:
+      - .env
+    volumes:
+      - db:/var/lib/mysql
+      - ./mariadb:/var/www/stuff
+      - ./mariadb/conf/50-server.cnf:/etc/mysql/mariadb.conf.d/50-server.cnf
+      - ./mariadb/tools/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+
+  wordpress:
+    container_name: wordpress
+    image: wordpress:5.7-apache
+    depends_on:
+      - mariadb
+    networks:
+      - app-network
+    env_file:
+      - .env
+    volumes:
+      - wp:/var/www/html
+      - ./wordpress:/var/www/stuff
+      - ./wordpress/tools/wordpress_start.sh:/docker-entrypoint.d/wordpress_start.sh
+      - ./wordpress/conf/pool.d:/etc/php/7.3/fpm/pool.d
+      - ./wordpress/tools/wp-config.php:/var/www/html/wp-config.php
+    restart: always
+    # run: ["/docker-entrypoint.d/wordpress_start.sh"]
+    # command: ["/usr/sbin/php-fpm7.3", "--nodaemonize"]
+    # command: ["docker-entrypoint.sh"]
+
+  nginx:
+    container_name: nginx
+    image: nginx:latest
+    networks:
+      - app-network
+    depends_on:
+      - wordpress
+    volumes:
+      - wp:/var/www/html
+      - ./nginx:/var/www/stuff
+      - ./nginx/conf/default.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/tools/nginx_start.sh:/docker-entrypoint.d/nginx_start.sh
+    restart: always
+    ports:
+      - "443:443"
+      - "80:80"
+    expose:
+      - "443"
+      - "80"
